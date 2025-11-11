@@ -1,8 +1,14 @@
-# Main.py
 import os
 from flask import Flask, request
 from telegram import Update
-from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    Application,
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 from bytez import Bytez
 
 # --- Environment variables ---
@@ -17,15 +23,15 @@ if not TELEGRAM_TOKEN or not BYTEZ_API_KEY:
 sdk = Bytez(BYTEZ_API_KEY)
 MODEL_NAME = "openai/gpt-4o"
 
-# --- Telegram App ---
+# --- Telegram app ---
 app_telegram = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-# --- Flask App ---
+# --- Flask app ---
 app = Flask(__name__)
 
 # --- /start командасы ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Сәлем! Мен AI ботпын. Хабар жазыңыз, мен жауап беремін!")
+    await update.message.reply_text("Сәлем! Мен AI ботпын 🤖. Хабарлама жазыңыз — мен жауап беремін!")
 
 # --- Пайдаланушы хабарламасын өңдеу ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -34,12 +40,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         output = model.run([{"role": "user", "content": user_text}])
+
         if isinstance(output, dict) and "content" in output:
             reply = output["content"]
         elif isinstance(output, str):
             reply = output
         else:
             reply = str(output)
+
     except Exception as e:
         reply = f"Қате шықты: {e}"
 
@@ -49,7 +57,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 app_telegram.add_handler(CommandHandler("start", start))
 app_telegram.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# --- Flask webhook маршруты ---
+# --- Flask маршруттары ---
 @app.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
 async def webhook():
     data = request.get_json(force=True)
@@ -59,7 +67,7 @@ async def webhook():
 
 @app.route("/")
 def index():
-    return "Bot is alive!", 200
+    return "🤖 Telegram AI Bot is alive on Render!", 200
 
 if __name__ == "__main__":
     print(f"✅ Flask сервер іске қосылды: порт {PORT}")
