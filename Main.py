@@ -1,58 +1,70 @@
 # Main.py
 import os
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
-from bytez import Bytez  # Bytez SDK
+from flask import Flask, request
+from telegram import Bot, Update
+from telegram.ext import Dispatcher, CommandHandler, MessageHandler, filters
+from bytez import Bytez
 
-# --- Орта айнымалылардан токендер ---
+# --- Environment variables ---
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 BYTEZ_API_KEY = os.getenv("BYTEZ_API_KEY")
+PORT = int(os.getenv("PORT", 5000))  # Render автоматты береді
 
 if not TELEGRAM_TOKEN or not BYTEZ_API_KEY:
     raise RuntimeError("TELEGRAM_TOKEN немесе BYTEZ_API_KEY орнатылмаған!")
+
+# --- Telegram bot және dispatcher ---
+bot = Bot(token=TELEGRAM_TOKEN)
+dispatcher = Dispatcher(bot, None, workers=0, use_context=True)
 
 # --- Bytez SDK бастау ---
 sdk = Bytez(BYTEZ_API_KEY)
 MODEL_NAME = "openai/gpt-4o"
 
 # --- /start командасы ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
+def start(update: Update, context):
+    update.message.reply_text(
         "Сәлем! Мен AI ботпын. Мәтінді жазыңыз, мен жауап беремін."
     )
 
 # --- Пайдаланушы хабарламасын өңдеу ---
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_message(update: Update, context):
     user_text = update.message.text
     model = sdk.model(MODEL_NAME)
 
     try:
-        output, error = model.run([{"role": "user", "content": user_text}])
+        output = model.run([{"role": "user", "content": user_text}])
 
-        if error:
-            reply = f"Қате шықты: {error}"
+        # Bytez кейде dict, кейде str қайтарады
+        if isinstance(output, dict) and "content" in output:
+            reply = output["content"]
+        elif isinstance(output, str):
+            reply = output
         else:
-            # Bytez кейде dict, кейде str қайтарады
-            if isinstance(output, dict) and "content" in output:
-                reply = output["content"]
-            elif isinstance(output, str):
-                reply = output
-            else:
-                reply = str(output)
+            reply = str(output)
 
     except Exception as e:
         reply = f"Қате шықты: {e}"
 
-    await update.message.reply_text(reply)
+    update.message.reply_text(reply)
 
-# --- Ботты іске қосу ---
-def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+# --- Handlers қосу ---
+dispatcher.add_handler(CommandHandler("start", start))
+dispatcher.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("Бот іске қосылды...")
-    app.run_polling()
+# --- Flask app ---
+app = Flask(__name__)
+
+@app.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    dispatcher.process_update(update)
+    return "ok", 200
+
+@app.route("/")
+def index():
+    return "Bot is running!", 200
 
 if __name__ == "__main__":
-    main()
+    # Render автоматты портты береді
+    app.run(host="0.0.0.0", port=PORT)
