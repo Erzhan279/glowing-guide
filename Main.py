@@ -13,13 +13,13 @@ sdk = Bytez(BYTEZ_API_KEY)
 MODEL_NAME = "openai/gpt-4o"
 
 app = Flask(__name__)
+loop = asyncio.get_event_loop()
 
-# --- Telegram App ---
+# --- Telegram application ---
 application = ApplicationBuilder().token(TOKEN).build()
 
-# --- Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Сәлем! Бот қосылды.")
+    await update.message.reply_text("Сәлем! Бот жұмыс істеп тұр 🙂")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -44,7 +44,8 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_m
 def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, application.bot)
-    asyncio.run(application.process_update(update))
+    # Async task ретінде шақыру
+    loop.create_task(application.process_update(update))
     return "OK", 200
 
 @app.route("/")
