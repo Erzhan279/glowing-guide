@@ -1,55 +1,36 @@
-# Main.py
-import os
 from flask import Flask, request
 from telegram import Bot, Update
-from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.utils.request import Request
 from bytez import Bytez
 import asyncio
+import os
 
-# --- Environment ---
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-BYTEZ_API_KEY = os.getenv("BYTEZ_API_KEY")
-PORT = int(os.getenv("PORT", 5000))
+TOKEN = os.environ["TELEGRAM_TOKEN"]
+BYTEZ_API_KEY = os.environ["BYTEZ_API_KEY"]
+PORT = int(os.environ["PORT"])
 
-if not TOKEN or not BYTEZ_API_KEY:
-    raise RuntimeError("TELEGRAM_TOKEN немесе BYTEZ_API_KEY орнатылмаған!")
+request = Request(con_pool_size=20, read_timeout=15, connect_timeout=15)
+bot = Bot(token=TOKEN, request=request)
 
-# --- Telegram bot ---
-bot = Bot(TOKEN)
-
-# --- Bytez SDK ---
 sdk = Bytez(BYTEZ_API_KEY)
 MODEL_NAME = "openai/gpt-4o"
 
-# --- Flask ---
 app = Flask(__name__)
+loop = asyncio.get_event_loop()
 
-@app.route("/")
-def index():
-    return "Bot is alive!"
-
-# --- Синхронды route ---
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, bot)
-
-    # Async функцияларды sync шақыру үшін event loop
-    asyncio.run(handle_update(update))
-
+    loop.create_task(handle_update(update))
     return "OK", 200
 
-# --- Хабарламаларды өңдеу ---
 async def handle_update(update):
     if update.message:
         text = update.message.text
-
-        # /start командасы
         if text == "/start":
-            await update.message.reply_text("Сәлем! Мен AI ботпын. Хабарлама жазыңыз 🙂")
+            await update.message.reply_text("Сәлем! Бот қосылды.")
             return
-
-        # AI жауап
         try:
             model = sdk.model(MODEL_NAME)
             output = model.run([{"role": "user", "content": text}])
@@ -61,9 +42,11 @@ async def handle_update(update):
                 reply = str(output)
         except Exception as e:
             reply = f"Қате шықты: {e}"
-
         await update.message.reply_text(reply)
 
-# --- Main ---
+@app.route("/")
+def index():
+    return "Bot is alive!"
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT)
